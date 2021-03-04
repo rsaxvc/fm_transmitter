@@ -293,14 +293,14 @@ class DMAController : public Device
     public:
         DMAController(uint32_t controllBlockAddress, unsigned dmaChannel) {
             dma = reinterpret_cast<DMARegisters *>(peripherals->GetVirtualAddress((dmaChannel < 15) ? DMA0_BASE_OFFSET + dmaChannel * 0x100 : DMA15_BASE_OFFSET));
-            dma->ctlStatus = (0x01 << 31);
+            dma->ctlStatus = (0x01 << 31); //Reset the controller
             std::this_thread::sleep_for(std::chrono::microseconds(1000));
-            dma->ctlStatus = (0x01 << 2) | (0x01 << 1);
+            dma->ctlStatus = (0x01 << 2) | (0x01 << 1); //Write 1s to clear INT and END flags
             dma->cbAddress = controllBlockAddress;
-            dma->ctlStatus = (0xff << 16) | 0x01;
+            dma->ctlStatus = (0xff << 16) | 0x01;//Configure priority to highest
         }
         virtual ~DMAController() {
-            dma->ctlStatus = (0x01 << 31);
+            dma->ctlStatus = (0x01 << 31);//Reset the controller
         }
         inline void SetControllBlockAddress(uint32_t address) {
             dma->cbAddress = address;

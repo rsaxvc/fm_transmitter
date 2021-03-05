@@ -7,22 +7,22 @@ ifeq ($(GPIO21), 1)
 endif
 
 all: main.o mailbox.o sample.o wave_reader.o transmitter.o
-	g++ -L/opt/vc/lib -o $(EXECUTABLE) main.o mailbox.o sample.o wave_reader.o transmitter.o -lm -lpthread -lbcm_host
+	g++ -L/opt/vc/lib -o $(EXECUTABLE) $^ -lm -lpthread -lbcm_host
 
 mailbox.o: mailbox.c mailbox.h
-	g++ $(FLAGS) -c mailbox.c
+	g++ $(FLAGS) -c $<
 
 sample.o: sample.cpp sample.hpp
-	g++ $(FLAGS) -c sample.cpp
+	g++ $(FLAGS) -c $<
 
 wave_reader.o: wave_reader.cpp wave_reader.hpp
-	g++ $(FLAGS) -c wave_reader.cpp
+	g++ $(FLAGS) -c $<
 
 transmitter.o: transmitter.cpp transmitter.hpp
-	g++ $(FLAGS) $(TRANSMITTER) -c transmitter.cpp
+	g++ $(FLAGS) $(TRANSMITTER) -c $<
 
 main.o: main.cpp
-	g++ $(FLAGS) -DVERSION=\"$(VERSION)\" -DEXECUTABLE=\"$(EXECUTABLE)\" -c main.cpp
+	g++ $(FLAGS) -DVERSION=\"$(VERSION)\" -DEXECUTABLE=\"$(EXECUTABLE)\" -c $<
 
 clean:
 	rm *.o

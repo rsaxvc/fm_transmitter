@@ -1,2 +1,5 @@
 *.o
 fm_transmitter
+dma_debugger
+timer_debugger
+pwm_debugger

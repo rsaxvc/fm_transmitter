@@ -34,6 +34,7 @@
 #include "transmitter.hpp"
 #include "mailbox.h"
 #include "peripherals.hpp"
+#include <iostream>
 #include <bcm_host.h>
 #include <thread>
 #include <chrono>
@@ -207,9 +208,12 @@ void Transmitter::TransmitViaDma(WaveReader &reader, ClockOutput &output, unsign
     volatile DMAControllBlock *dmaCb = reinterpret_cast<DMAControllBlock *>(allocated.GetAddress());
     volatile uint32_t *clkDiv = reinterpret_cast<uint32_t *>(reinterpret_cast<uint32_t>(dmaCb) + 2 * sizeof(DMAControllBlock) * bufferSize);
     volatile uint32_t *pwmFifoData = reinterpret_cast<uint32_t *>(reinterpret_cast<uint32_t>(clkDiv) + sizeof(uint32_t) * bufferSize);
+    float ditherError = 0.0f;
     for (i = 0; i < bufferSize; i++) {
-        float value = samples[i].GetMonoValue();
-        clkDiv[i] = (0x5a << 24) | (0xffffff & (clockDivisor - static_cast<int>(round(value * divisorRange))));
+        float value = samples[i].GetMonoValue() + ditherError;
+        int rounded = static_cast<int>(round(value * divisorRange));
+        ditherError = (float)rounded/divisorRange - value;
+        clkDiv[i] = (0x5a << 24) | (0xffffff & (clockDivisor - rounded));
         dmaCb[cbOffset].transferInfo = (0x01 << 26) | (0x01 << 3);
         dmaCb[cbOffset].srcAddress = allocated.GetPhysicalAddress(&clkDiv[i]);
         dmaCb[cbOffset].dstAddress = peripherals.GetPhysicalAddress(&output.GetDivisor());
@@ -249,11 +253,14 @@ void Transmitter::TransmitViaDma(WaveReader &reader, ClockOutput &output, unsign
             cbOffset = 0;
             eof = samples.size() < bufferSize;
             for (i = 0; i < samples.size(); i++) {
-                float value = samples[i].GetMonoValue();
+                float value = samples[i].GetMonoValue() + ditherError;
                 while (i == ((dma.GetControllBlockAddress() - allocated.GetPhysicalAddress(dmaCb)) / (2 * sizeof(DMAControllBlock)))) {
                     std::this_thread::sleep_for(std::chrono::microseconds(1000));
                 }
-                clkDiv[i] = (0x5a << 24) | (0xffffff & (clockDivisor - static_cast<int>(round(value * divisorRange))));
+                int rounded = static_cast<int>(round(value * divisorRange));
+                ditherError = (float)rounded/(float)divisorRange - value;
+                //if((i % 0xFFF ) < 4) std::cout<<"i:"<<i<<"\tvalue:"<<value<<"\trounded:"<<rounded<<"\tditherError:"<<ditherError<<std::endl;
+                clkDiv[i] = (0x5a << 24) | (0xffffff & (clockDivisor - rounded));
                 cbOffset += 2;
             }
         }
@@ -271,6 +278,7 @@ void Transmitter::TransmitterThread(Transmitter *instance, ClockOutput *output, 
     volatile TimerRegisters *timer = reinterpret_cast<TimerRegisters *>(peripherals.GetVirtualAddress(TIMER_BASE_OFFSET));
     uint64_t current = *(reinterpret_cast<volatile uint64_t *>(&timer->low));
     uint64_t playbackStart = current;
+    float ditherError = 0.0f;
 
     while (true) {
         std::vector<Sample> loadedSamples;
@@ -298,8 +306,11 @@ void Transmitter::TransmitterThread(Transmitter *instance, ClockOutput *output, 
                 break;
             }
             unsigned prevOffset = offset;
-            float value = loadedSamples[offset].GetMonoValue();
-            instance->output->SetDivisor(clockDivisor - static_cast<int>(round(value * divisorRange)));
+            float value = loadedSamples[offset].GetMonoValue() + ditherError;
+            int rounded = static_cast<int>(round(value * divisorRange));
+            ditherError = (float)rounded/divisorRange - value;
+            clkDiv[i] = (0x5a << 24) | (0xffffff & (clockDivisor - rounded));
+            instance->output->SetDivisor(clockDivisor - rounded);
             while (offset == prevOffset) {
                 std::this_thread::sleep_for(std::chrono::microseconds(1)); // asm("nop");
                 current = *(reinterpret_cast<volatile uint64_t *>(&timer->low));;
